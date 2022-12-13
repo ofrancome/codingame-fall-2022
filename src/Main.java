@@ -1,12 +1,14 @@
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Random;
 import java.util.Scanner;
+import java.util.stream.Collectors;
 
 class Tile {
-    final int x, y, scrapAmount, owner, units;
-    final boolean recycler, canBuild, canSpawn, inRangeOfRecycler;
+    int x, y, scrapAmount, owner, units;
+    boolean recycler, canBuild, canSpawn, inRangeOfRecycler;
 
     public Tile(int x, int y, int scrapAmount, int owner, int units, boolean recycler, boolean canBuild, boolean canSpawn,
                 boolean inRangeOfRecycler) {
@@ -31,24 +33,45 @@ class Player {
     private static int height;
 
     private static final Random random = new Random();
+    private static List<List<Integer>> neigbhoursList = new ArrayList<>();
 
     public static void main(String args[]) {
+        long start = System.nanoTime();
         Scanner in = new Scanner(System.in);
         width = in.nextInt();
         height = in.nextInt();
-
+        for (int i = 0; i < height; i++) {
+            for (int j = 0; j < width; j++) {
+                List<Integer> neighbours = new ArrayList<>();
+                if (j-1 >= 0) {
+                    neighbours.add(getIndexFromCoord(j - 1, i));
+                }
+                if (i-1 >= 0) {
+                    neighbours.add(getIndexFromCoord(j, i - 1));
+                }
+                if (width > j + 1) {
+                    neighbours.add(getIndexFromCoord(j + 1, i));
+                }
+                if (height > i + 1) {
+                    neighbours.add(getIndexFromCoord(j, i + 1));
+                }
+                neigbhoursList.add(neighbours);
+            }
+        }
+        System.err.println("Init: " + (System.nanoTime() - start) / 1000000);
         int turn = 0;
         // game loop
         while (true) {
+            long startTurn = System.nanoTime();
             turn++;
-            List<Tile> tiles = new ArrayList<>();
-            List<Tile> myTiles = new ArrayList<>();
-            List<Tile> oppTiles = new ArrayList<>();
-            List<Tile> neutralTiles = new ArrayList<>();
-            List<Tile> myUnits = new ArrayList<>();
-            List<Tile> oppUnits = new ArrayList<>();
-            List<Tile> myRecyclers = new ArrayList<>();
-            List<Tile> oppRecyclers = new ArrayList<>();
+            List<Tile> tiles = new ArrayList<>(width * height);
+            List<Tile> myTiles = new ArrayList<>(width * height);
+            List<Tile> oppTiles = new ArrayList<>(width * height);
+            List<Tile> neutralTiles = new ArrayList<>(width * height);
+            List<Tile> myUnits = new ArrayList<>(width * height);
+            List<Tile> oppUnits = new ArrayList<>(width * height);
+            List<Tile> myRecyclers = new ArrayList<>(width * height);
+            List<Tile> oppRecyclers = new ArrayList<>(width * height);
 
             int myMatter = in.nextInt();
             int oppMatter = in.nextInt();
@@ -85,63 +108,95 @@ class Player {
                     }
                 }
             }
-
+            System.err.println("Read Turn: " + (System.nanoTime() - startTurn) / 1000000);
+            startTurn = System.nanoTime();
             List<String> actions = new ArrayList<>();
 
             int myScrap = myMatter;
-            while (myScrap >= 10) {
-                boolean buildWorth = (random.nextInt() % 200 - turn) > 150;
-                if (turn == 1 || buildWorth) {
-                    Tile mostRecyclingPotential = myTiles.stream()
-                            .filter(t -> t.canBuild)
-                            .max(Comparator.comparingInt(t -> recyclingPotential(t.x, t.y, tiles)))
-                            .orElse(null);
-                    if (mostRecyclingPotential != null) {
-                        actions.add("BUILD " + mostRecyclingPotential.x + " " + mostRecyclingPotential.y);
-                        myScrap -= 10;
+            boolean didSmth = true;
+            while (myScrap >= 10 && didSmth) {
+                didSmth = false;
+                List<Tile> opportunities = buildOpportunity(myTiles, tiles);
+                if (!opportunities.isEmpty()) {
+                    Tile opportunity = opportunities.get(0);
+                    actions.add("BUILD " + opportunity.x + " " + opportunity.y);
+                    myScrap -= 10;
+                }
+                if (myScrap >= 10) {
+//                    System.err.println("Trying to Spawn");
+                    Tile spawnTile = null;
+                    for (Tile myTile : myTiles) {
+                        if (myTile.canSpawn && myTile.scrapAmount > 1 && myTile.units == 0 && neighbours(myTile.x, myTile.y, tiles).stream().anyMatch(t2 -> t2.owner == OPP)) {
+                            spawnTile = myTile;
+                            myTile.canSpawn = false;
+                            System.err.println("Spawned at " + myTile.x + " " + myTile.y);
+                            break;
+                        }
                     }
-                } else {
-                    Tile mostScrap = myTiles.stream()
-                            .filter(t -> t.canSpawn)
-                            .max(Comparator.comparingInt(t -> t.scrapAmount))
-                            .orElse(null);
-                    if (mostScrap != null) {
-                        actions.add("SPAWN 1 " + mostScrap.x + " " + mostScrap.y);
+                    if (spawnTile == null) {
+                        for (Tile myTile : myTiles) {
+                            if (myTile.canSpawn && myTile.scrapAmount > 1 && myTile.units == 0 && neighbours(myTile.x, myTile.y, tiles).stream().anyMatch(t2 -> t2.owner == NOONE)) {
+                                spawnTile = myTile;
+                                myTile.canSpawn = false;
+                                System.err.println("Spawned at " + myTile.x + " " + myTile.y);
+                                break;
+                            }
+                        }
+                    }
+                    if (spawnTile != null) {
+                        actions.add("SPAWN 1 " + spawnTile.x + " " + spawnTile.y);
                         myScrap -= 10;
+                        didSmth = true;
                     }
                 }
             }
+            System.err.println("Build/Spawn: " + (System.nanoTime() - startTurn) / 1000000);
 
+            startTurn = System.nanoTime();
             int oppIndex = 0;
             for (Tile tile : myUnits) {
-                Tile target = null;
-                for (Tile neighbour : neighbours(tile.x, tile.y, tiles)) {
-                    if (neighbour.owner == OPP && neighbour.scrapAmount > 1) {
-                        if (neighbour.units < tile.units) {
+                while (tile.units > 0) {
+//                    System.err.println("1 - tile " + tile.x + " - " + tile.y);
+                    Tile target = null;
+                    for (Tile neighbour : neighbours(tile.x, tile.y, tiles)) {
+                        if (neighbour.owner == OPP && neighbour.scrapAmount > 0 && !neighbour.inRangeOfRecycler) {
+//                            System.err.println("2- tile " + tile.x + " - " + tile.y);
                             target = neighbour;
                             break;
                         }
                     }
-                }
-                for (Tile neighbour : neighbours(tile.x, tile.y, tiles)) {
-                    if (neighbour.owner == NOONE && neighbour.scrapAmount > 1) {
-                        if (neighbour.units < tile.units) {
-                            target = neighbour;
-                            break;
+                    if (target == null) {
+//                        System.err.println("3- tile " + tile.x + " - " + tile.y);
+                        for (Tile neighbour : neighbours(tile.x, tile.y, tiles)) {
+                            if (neighbour.owner == NOONE && neighbour.scrapAmount > 0 && !neighbour.inRangeOfRecycler) {
+//                                System.err.println("4- tile " + tile.x + " - " + tile.y);
+                                target = neighbour;
+                                break;
+                            }
                         }
                     }
-                }
-                if (target == null) {
-                    target = oppTiles.get(oppIndex);
-                    oppIndex = (oppIndex + 1) % oppTiles.size();
-                }
-                if (target != null) {
-                    int amount = tile.units;
-                    actions.add(String.format("MOVE %d %d %d %d %d", amount, tile.x, tile.y, target.x, target.y));
+                    if (target == null) {
+//                        System.err.println("5- tile " + tile.x + " - " + tile.y);
+                        target = oppTiles.get(oppIndex);
+                        oppIndex = (oppIndex + 1) % oppTiles.size();
+                    }
+                    if (target != null) {
+                        int amount;
+                        if (target.owner == NOONE) {
+                            amount = 1;
+                        } else {
+                            amount = tile.units;
+                        }
+                        tile.units -= amount;
+                        target.owner = ME;
+                        actions.add(String.format("MOVE %d %d %d %d %d", amount, tile.x, tile.y, target.x, target.y));
+                    }
                 }
             }
 
             // To debug: System.err.println("Debug messages...");
+
+            System.err.println("Move: " + (System.nanoTime() - startTurn) / 1000000);
             if (actions.isEmpty()) {
                 System.out.println("WAIT");
             } else {
@@ -150,19 +205,22 @@ class Player {
         }
     }
 
+    private static List<Tile> buildOpportunity(List<Tile> myTiles, List<Tile> tiles) {
+        List<Tile> tilesToBuild = myTiles.stream().filter(t -> t.canBuild && neighbours(t.x, t.y, tiles).stream().allMatch(t2 -> t2.owner == OPP)).collect(Collectors.toList());
+        if (!tilesToBuild.isEmpty()) {
+            return tilesToBuild;
+        }
+        tilesToBuild.addAll(myTiles.stream().filter(t -> t.canBuild && neighbours(t.x, t.y, tiles).stream().anyMatch(t2 -> t2.owner == OPP)).collect(Collectors.toList()));
+        if (!tilesToBuild.isEmpty()) {
+            return tilesToBuild;
+        }
+        return Collections.emptyList();
+    }
+
     static List<Tile> neighbours(int x, int y, List<Tile> tiles) {
         List<Tile> neighbours = new ArrayList<>(4);
-        if (x-1 > 0) {
-            neighbours.add(tiles.get(getIndexFromCoord(x - 1, y)));
-        }
-        if (y-1 > 0) {
-            neighbours.add(tiles.get(getIndexFromCoord(x, y - 1)));
-        }
-        if (height < x + 1) {
-            neighbours.add(tiles.get(getIndexFromCoord(x + 1, y)));
-        }
-        if (width < y + 1) {
-            neighbours.add(tiles.get(getIndexFromCoord(x, y + 1)));
+        for (Integer i : neigbhoursList.get(getIndexFromCoord(x, y))) {
+            neighbours.add(tiles.get(i));
         }
         return neighbours;
     }
