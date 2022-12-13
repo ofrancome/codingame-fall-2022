@@ -32,7 +32,6 @@ class Player {
     private static int width;
     private static int height;
 
-    private static final Random random = new Random();
     private static List<List<Integer>> neigbhoursList = new ArrayList<>();
 
     public static void main(String args[]) {
@@ -129,16 +128,16 @@ class Player {
                         if (myTile.canSpawn && myTile.scrapAmount > 1 && myTile.units == 0 && neighbours(myTile.x, myTile.y, tiles).stream().anyMatch(t2 -> t2.owner == OPP)) {
                             spawnTile = myTile;
                             myTile.canSpawn = false;
-                            System.err.println("Spawned at " + myTile.x + " " + myTile.y);
+//                            System.err.println("Spawned at " + myTile.x + " " + myTile.y);
                             break;
                         }
                     }
                     if (spawnTile == null) {
                         for (Tile myTile : myTiles) {
-                            if (myTile.canSpawn && myTile.scrapAmount > 1 && myTile.units == 0 && neighbours(myTile.x, myTile.y, tiles).stream().anyMatch(t2 -> t2.owner == NOONE)) {
+                            if (myTile.canSpawn && myTile.scrapAmount > 1 && myTile.units == 0 && neighbours(myTile.x, myTile.y, tiles).stream().anyMatch(t2 -> (t2.owner == NOONE && t2.scrapAmount > 0))) {
                                 spawnTile = myTile;
                                 myTile.canSpawn = false;
-                                System.err.println("Spawned at " + myTile.x + " " + myTile.y);
+//                                System.err.println("Spawned at " + myTile.x + " " + myTile.y);
                                 break;
                             }
                         }
@@ -158,7 +157,9 @@ class Player {
                 while (tile.units > 0) {
 //                    System.err.println("1 - tile " + tile.x + " - " + tile.y);
                     Tile target = null;
-                    for (Tile neighbour : neighbours(tile.x, tile.y, tiles)) {
+                    List<Tile> sortedNeighbours = neighbours(tile.x, tile.y, tiles);
+                    sortedNeighbours.sort(Comparator.comparingInt(t -> distance(t.x, t.y, width / 2, height / 2)));
+                    for (Tile neighbour : sortedNeighbours) {
                         if (neighbour.owner == OPP && neighbour.scrapAmount > 0 && !neighbour.inRangeOfRecycler) {
 //                            System.err.println("2- tile " + tile.x + " - " + tile.y);
                             target = neighbour;
@@ -167,7 +168,7 @@ class Player {
                     }
                     if (target == null) {
 //                        System.err.println("3- tile " + tile.x + " - " + tile.y);
-                        for (Tile neighbour : neighbours(tile.x, tile.y, tiles)) {
+                        for (Tile neighbour : sortedNeighbours) {
                             if (neighbour.owner == NOONE && neighbour.scrapAmount > 0 && !neighbour.inRangeOfRecycler) {
 //                                System.err.println("4- tile " + tile.x + " - " + tile.y);
                                 target = neighbour;
@@ -233,5 +234,9 @@ class Player {
         int scrap = tiles.get(getIndexFromCoord(x,y)).scrapAmount;
         scrap += neighbours(x, y, tiles).stream().mapToInt(tile -> tile.scrapAmount).sum();
         return scrap;
+    }
+
+    static int distance(int x1, int y1, int x2, int y2) {
+        return Math.abs(x1 - x2) + Math.abs(y1 - y2);
     }
 }
