@@ -108,95 +108,130 @@ class Player {
                 }
             }
             System.err.println("Read Turn: " + (System.nanoTime() - startTurn) / 1000000);
-            startTurn = System.nanoTime();
             List<String> actions = new ArrayList<>();
+            if (turn == 1) {
+                Tile topMost = myTiles.stream().min(Comparator.comparingInt(t -> t.y)).get();
+                Tile bottomMost = myTiles.stream().max(Comparator.comparingInt(t -> t.y)).get();
 
-            int myScrap = myMatter;
-            boolean didSmth = true;
-            while (myScrap >= 10 && didSmth) {
-                didSmth = false;
-                List<Tile> opportunities = buildOpportunity(myTiles, tiles);
-                if (!opportunities.isEmpty()) {
-                    Tile opportunity = opportunities.get(0);
-                    actions.add("BUILD " + opportunity.x + " " + opportunity.y);
-                    myScrap -= 10;
-                }
-                if (myScrap >= 10) {
-//                    System.err.println("Trying to Spawn");
-                    Tile spawnTile = null;
-                    for (Tile myTile : myTiles) {
-                        if (myTile.canSpawn && myTile.scrapAmount > 1 && myTile.units == 0 && neighbours(myTile.x, myTile.y, tiles).stream().anyMatch(t2 -> t2.owner == OPP)) {
-                            spawnTile = myTile;
-                            myTile.canSpawn = false;
-//                            System.err.println("Spawned at " + myTile.x + " " + myTile.y);
-                            break;
+                for (Tile tile : myTiles) {
+                    int direction = tile.x < width/2 ? 1 : -1;
+                    if (tile.y == topMost.y) {
+                        if (tile.y > 1 && tiles.get(getIndexFromCoord(tile.x, tile.y - 1)).scrapAmount > 0) {
+                            actions.add(String.format("MOVE %d %d %d %d %d", tile.units, tile.x, tile.y, tile.x, tile.y - 1));
+                        } else {
+                            actions.add(String.format("MOVE %d %d %d %d %d", tile.units, tile.x, tile.y, tile.x, tile.y + direction));
                         }
+                    } else if (tile.y == bottomMost.y) {
+                        if (tile.y < height - 1 && tiles.get(getIndexFromCoord(tile.x, tile.y + 1)).scrapAmount > 0) {
+                            actions.add(String.format("MOVE %d %d %d %d %d", tile.units, tile.x, tile.y, tile.x, tile.y + 1));
+                        } else {
+                            actions.add(String.format("MOVE %d %d %d %d %d", tile.units, tile.x, tile.y, tile.x, tile.y + direction));
+                        }
+
+                    } else {
+                        actions.add(String.format("MOVE %d %d %d %d %d", tile.units, tile.x, tile.y, tile.x, tile.y + direction));
                     }
-                    if (spawnTile == null) {
+                }
+                actions.add(String.format("SPAWN 1 %d %d", topMost.x, topMost.y-1));
+            } else {
+                startTurn = System.nanoTime();
+
+                int myScrap = myMatter;
+                boolean didSmth = true;
+                while (myScrap >= 10 && didSmth) {
+                    didSmth = false;
+                    List<Tile> opportunities = buildOpportunity(myTiles, tiles);
+                    if (!opportunities.isEmpty()) {
+                        Tile opportunity = opportunities.get(0);
+                        actions.add("BUILD " + opportunity.x + " " + opportunity.y);
+                        myScrap -= 10;
+                    }
+                    if (myScrap >= 10) {
+//                    System.err.println("Trying to Spawn");
+                        Tile spawnTile = null;
                         for (Tile myTile : myTiles) {
-                            if (myTile.canSpawn && myTile.scrapAmount > 1 && myTile.units == 0 && neighbours(myTile.x, myTile.y, tiles).stream().anyMatch(t2 -> (t2.owner == NOONE && t2.scrapAmount > 0))) {
+                            if (myTile.canSpawn && myTile.scrapAmount > 1 && neighbours(myTile.x, myTile.y, tiles).stream().anyMatch(t2 -> t2.owner == OPP)) {
                                 spawnTile = myTile;
                                 myTile.canSpawn = false;
-//                                System.err.println("Spawned at " + myTile.x + " " + myTile.y);
+//                            System.err.println("Spawned at " + myTile.x + " " + myTile.y);
                                 break;
                             }
                         }
-                    }
-                    if (spawnTile != null) {
-                        actions.add("SPAWN 1 " + spawnTile.x + " " + spawnTile.y);
-                        myScrap -= 10;
-                        didSmth = true;
-                    }
-                }
-            }
-            System.err.println("Build/Spawn: " + (System.nanoTime() - startTurn) / 1000000);
-
-            startTurn = System.nanoTime();
-            int oppIndex = 0;
-            for (Tile tile : myUnits) {
-                while (tile.units > 0) {
-//                    System.err.println("1 - tile " + tile.x + " - " + tile.y);
-                    Tile target = null;
-                    List<Tile> sortedNeighbours = neighbours(tile.x, tile.y, tiles);
-                    sortedNeighbours.sort(Comparator.comparingInt(t -> distance(t.x, t.y, width / 2, height / 2)));
-                    for (Tile neighbour : sortedNeighbours) {
-                        if (neighbour.owner == OPP && neighbour.scrapAmount > 0 && !neighbour.inRangeOfRecycler) {
-//                            System.err.println("2- tile " + tile.x + " - " + tile.y);
-                            target = neighbour;
-                            break;
+                        if (spawnTile == null) {
+                            for (Tile myTile : myTiles) {
+                                if (myTile.canSpawn && myTile.scrapAmount > 1 && myTile.units == 0 && neighbours(myTile.x, myTile.y, tiles).stream().anyMatch(t2 -> (t2.owner == OPP && t2.scrapAmount > 0))) {
+                                    spawnTile = myTile;
+                                    myTile.canSpawn = false;
+//                                System.err.println("Spawned at " + myTile.x + " " + myTile.y);
+                                    break;
+                                }
+                            }
+                            if (spawnTile == null) {
+                                for (Tile myTile : myTiles) {
+                                    if (myTile.canSpawn && myTile.scrapAmount > 1 && myTile.units == 0 && neighbours(myTile.x, myTile.y, tiles).stream().anyMatch(t2 -> (t2.owner == NOONE && t2.scrapAmount > 0))) {
+                                        spawnTile = myTile;
+                                        myTile.canSpawn = false;
+    //                                System.err.println("Spawned at " + myTile.x + " " + myTile.y);
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        if (spawnTile != null) {
+                            actions.add("SPAWN 1 " + spawnTile.x + " " + spawnTile.y);
+                            myScrap -= 10;
+                            didSmth = true;
                         }
                     }
-                    if (target == null) {
-//                        System.err.println("3- tile " + tile.x + " - " + tile.y);
+                }
+                System.err.println("Build/Spawn: " + (System.nanoTime() - startTurn) / 1000000);
+
+                startTurn = System.nanoTime();
+                int oppIndex = 0;
+                for (Tile tile : myUnits) {
+                    while (tile.units > 0) {
+//                    System.err.println("1 - tile " + tile.x + " - " + tile.y);
+                        Tile target = null;
+                        List<Tile> sortedNeighbours = neighbours(tile.x, tile.y, tiles);
+                        sortedNeighbours.sort(Comparator.comparingInt(t -> distance(t.x, t.y, width / 2, height / 2)));
                         for (Tile neighbour : sortedNeighbours) {
-                            if (neighbour.owner == NOONE && neighbour.scrapAmount > 0 && !neighbour.inRangeOfRecycler) {
-//                                System.err.println("4- tile " + tile.x + " - " + tile.y);
+                            if (neighbour.owner == OPP && neighbour.scrapAmount > 0 && !neighbour.inRangeOfRecycler) {
+//                            System.err.println("2- tile " + tile.x + " - " + tile.y);
                                 target = neighbour;
                                 break;
                             }
                         }
-                    }
-                    if (target == null) {
-//                        System.err.println("5- tile " + tile.x + " - " + tile.y);
-                        target = oppTiles.get(oppIndex);
-                        oppIndex = (oppIndex + 1) % oppTiles.size();
-                    }
-                    if (target != null) {
-                        int amount;
-                        if (target.owner == NOONE) {
-                            amount = 1;
-                        } else {
-                            amount = tile.units;
+                        if (target == null) {
+//                        System.err.println("3- tile " + tile.x + " - " + tile.y);
+                            for (Tile neighbour : sortedNeighbours) {
+                                if (neighbour.owner == NOONE && neighbour.scrapAmount > 0 && !neighbour.inRangeOfRecycler) {
+//                                System.err.println("4- tile " + tile.x + " - " + tile.y);
+                                    target = neighbour;
+                                    break;
+                                }
+                            }
                         }
-                        tile.units -= amount;
-                        target.owner = ME;
-                        actions.add(String.format("MOVE %d %d %d %d %d", amount, tile.x, tile.y, target.x, target.y));
+                        if (target == null) {
+//                        System.err.println("5- tile " + tile.x + " - " + tile.y);
+                            target = oppTiles.get(oppIndex);
+                            oppIndex = (oppIndex + 1) % oppTiles.size();
+                        }
+                        if (target != null) {
+                            int amount;
+                            if (target.owner == NOONE) {
+                                amount = 1;
+                            } else {
+                                amount = tile.units;
+                            }
+                            tile.units -= amount;
+                            target.owner = ME;
+                            actions.add(String.format("MOVE %d %d %d %d %d", amount, tile.x, tile.y, target.x, target.y));
+                        }
                     }
                 }
+
+                // To debug: System.err.println("Debug messages...");
             }
-
-            // To debug: System.err.println("Debug messages...");
-
             System.err.println("Move: " + (System.nanoTime() - startTurn) / 1000000);
             if (actions.isEmpty()) {
                 System.out.println("WAIT");
