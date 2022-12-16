@@ -2,15 +2,21 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Random;
 import java.util.Scanner;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 class Tile {
-    int x, y, scrapAmount, owner, units;
-    boolean recycler, canBuild, canSpawn, inRangeOfRecycler;
+    int x;
+    int y;
+    int scrapAmount;
+    int owner;
+    int units;
+    boolean recycler;
+    boolean canBuild;
+    boolean canSpawn;
+    boolean inRangeOfRecycler;
 
     public Tile(int x, int y, int scrapAmount, int owner, int units, boolean recycler, boolean canBuild, boolean canSpawn,
                 boolean inRangeOfRecycler) {
@@ -24,6 +30,10 @@ class Tile {
         this.canSpawn = canSpawn;
         this.inRangeOfRecycler = inRangeOfRecycler;
     }
+
+    public boolean isAdjacent(Tile target) {
+        return Math.abs(x - target.x) + Math.abs(y - target.y) == 1;
+    }
 }
 
 class Player {
@@ -36,7 +46,9 @@ class Player {
 
     private static int turn = 0;
 
-    private static List<List<Integer>> neigbhoursList = new ArrayList<>();
+    private static final List<List<Integer>> neigbhoursList = new ArrayList<>();
+    private static int ecoRecycl;
+    private static int ecoTurn;
 
     public static void main(String args[]) {
         long start = System.nanoTime();
@@ -61,6 +73,9 @@ class Player {
                 neigbhoursList.add(neighbours);
             }
         }
+
+//        int ecoRecycl = 3;
+//        int ecoTurn = 3;
         System.err.println("Init: " + (System.nanoTime() - start) / 1000000);
         // game loop
         while (true) {
@@ -77,6 +92,7 @@ class Player {
 
             int myMatter = in.nextInt();
             int oppMatter = in.nextInt();
+            int roundScrapTiles = 0;
             for (int y = 0; y < height; y++) {
                 for (int x = 0; x < width; x++) {
                     Tile tile = new Tile(
@@ -108,11 +124,18 @@ class Player {
                     } else {
                         neutralTiles.add(tile);
                     }
+                    if (tile.scrapAmount > 0) {
+                        roundScrapTiles++;
+                    }
                 }
             }
             System.err.println("Read Turn: " + (System.nanoTime() - startTurn) / 1000000);
             List<String> actions = new ArrayList<>();
             if (turn == 1) {
+                ecoRecycl = (roundScrapTiles / 40);
+                ecoTurn = width / 2;
+                System.err.println("ecoRecycl = " + ecoRecycl);
+                System.err.println("ecoTurn = " + ecoTurn);
                 Tile topMost = myTiles.stream().min(Comparator.comparingInt(t -> t.y)).get();
                 Tile bottomMost = myTiles.stream().max(Comparator.comparingInt(t -> t.y)).get();
 
@@ -132,8 +155,10 @@ class Player {
                             actions.add(String.format("MOVE %d %d %d %d %d", tile.units, tile.x, tile.y, tile.x, tile.y + direction));
                         }
 
-                    } else {
+                    } else if (tile.x == topMost.x + direction) {
                         actions.add(String.format("MOVE %d %d %d %d %d", tile.units, tile.x, tile.y, tile.x + direction, tile.y));
+                    } else {
+                        actions.add(String.format("MOVE %d %d %d %d %d", tile.units, tile.x, tile.y, tile.x - direction, tile.y));
                     }
                 }
                 actions.add(String.format("SPAWN 1 %d %d", topMost.x + direction, topMost.y + 1));
@@ -142,6 +167,7 @@ class Player {
 
                 int myScrap = myMatter;
                 boolean didSmth = true;
+                int ecoRecyclSize = myRecyclers.size();
                 while (myScrap >= 10 && didSmth) {
                     didSmth = false;
                     List<Tile> opportunities = buildOpportunity(myTiles, tiles);
@@ -149,18 +175,24 @@ class Player {
                         Tile opportunity = opportunities.get(0);
                         actions.add("BUILD " + opportunity.x + " " + opportunity.y);
                         opportunity.recycler = true;
+                        opportunity.canBuild = false;
+                        opportunity.canSpawn = false;
                         myScrap -= 10;
                         didSmth = true;
+                        ecoRecyclSize++;
                     } else {
-                        if (myRecyclers.size() < 2 && turn < 10) {
+                        if (ecoRecyclSize < ecoRecycl && turn < ecoTurn) {
                             List<Tile> recycleTiles = myTiles.stream().filter(t -> t.canBuild).collect(Collectors.toList());
                             recycleTiles.sort(Comparator.comparingInt((Tile t) -> t.scrapAmount).reversed());
                             if (recycleTiles.size() > 1) {
                                 Tile recycle = recycleTiles.get(0);
                                 recycle.recycler = true;
+                                recycle.canBuild = false;
+                                recycle.canSpawn = false;
                                 actions.add("BUILD " + recycle.x + " " + recycle.y);
                                 myScrap -= 10;
                                 didSmth = true;
+                                ecoRecyclSize++;
                             }
                         }
                     }
@@ -177,7 +209,6 @@ class Player {
                                         .allMatch(t2 -> t2.owner == OPP)) {
                                 spawnTile = myTile;
                                 amount = myScrap / 10;
-                                myTile.canSpawn = false;
 //                            System.err.println("Spawned at " + myTile.x + " " + myTile.y);
                                 break;
                             }
@@ -191,7 +222,6 @@ class Player {
                                             .anyMatch(t2 -> (t2.owner == OPP && t2.scrapAmount > 0))) {
                                     spawnTile = myTile;
                                     amount = myScrap / 10;
-                                    myTile.canSpawn = false;
 //                                System.err.println("Spawned at " + myTile.x + " " + myTile.y);
                                     break;
                                 }
@@ -224,13 +254,13 @@ class Player {
                 int oppIndex = 0;
                 for (Tile tile : myUnits) {
                     while (tile.units > 0) {
-//                    System.err.println("1 - tile " + tile.x + " - " + tile.y);
+
                         Tile target = null;
                         List<Tile> sortedNeighbours = neighbours(tile.x, tile.y, tiles);
                         sortedNeighbours.sort(Comparator.comparingInt(t -> distance(t.x, t.y, width / 2, height / 2)));
                         for (Tile neighbour : sortedNeighbours) {
                             if (neighbour.owner == OPP && neighbour.scrapAmount > 0 && !neighbour.inRangeOfRecycler) {
-//                            System.err.println("2- tile " + tile.x + " - " + tile.y);
+//                                System.err.println("Taken - tile " + tile.x + " - " + tile.y);
                                 target = neighbour;
                                 break;
                             }
@@ -240,6 +270,11 @@ class Player {
                             for (Tile neighbour : sortedNeighbours) {
                                 if (neighbour.owner == NOONE && neighbour.scrapAmount > 0 && !neighbour.inRangeOfRecycler) {
 //                                System.err.println("4- tile " + tile.x + " - " + tile.y);
+                                    if (neighbours(neighbour.x, neighbour.y, tiles).stream()
+                                                .anyMatch(t -> t.owner == OPP && t.units > tile.units)) {
+                                        target = neighbour;
+                                        break;
+                                    }
                                     target = neighbour;
                                     break;
                                 }
@@ -262,7 +297,9 @@ class Player {
                                 amount = tile.units;
                             }
                             tile.units -= amount;
-                            target.owner = ME;
+                            if (tile.isAdjacent(target)) {
+                                target.owner = ME;
+                            }
                             actions.add(String.format("MOVE %d %d %d %d %d", amount, tile.x, tile.y, target.x, target.y));
                         }
                     }
