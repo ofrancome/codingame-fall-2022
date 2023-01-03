@@ -175,13 +175,27 @@ class Player {
             }
 
             if (!hasReachTop) {
-                Tile topMost = gameboard.getMyTiles().stream().min(Comparator.comparingInt(t -> t.y)).get();
-                actions.add(String.format("MOVE %d %d %d %d %d", 1, topMost.x, topMost.y, topMost.x, 0));
+                Tile topMost = gameboard.getMyUnits().stream().min(Comparator.comparingInt(t -> t.y)).get();
+                int direction = topMost.x < width / 2 ? 1 : -1;
+                if (gameboard.getTiles().get(getIndexFromCoord(topMost.x, topMost.y - 1)).scrapAmount > 0) {
+                    actions.add(String.format("MOVE %d %d %d %d %d", topMost.units, topMost.x, topMost.y, topMost.x, topMost.y - 1));
+                } else if (gameboard.getTiles().get(getIndexFromCoord(topMost.x + direction, topMost.y)).scrapAmount > 0) {
+                    actions.add(String.format("MOVE %d %d %d %d %d", topMost.units, topMost.x, topMost.y, topMost.x + direction, topMost.y));
+                } else {
+                    actions.add(String.format("MOVE %d %d %d %d %d", 1, topMost.x, topMost.y, topMost.x, 0));
+                }
                 topMost.units -= 1;
             }
             if (!hasReachBottom) {
-                Tile bottomMost = gameboard.getMyTiles().stream().max(Comparator.comparingInt(t -> t.y)).get();
-                actions.add(String.format("MOVE %d %d %d %d %d", 1, bottomMost.x, bottomMost.y, bottomMost.x, height-1));
+                Tile bottomMost = gameboard.getMyUnits().stream().max(Comparator.comparingInt(t -> t.y)).get();
+                int direction = bottomMost.x < width / 2 ? 1 : -1;
+                if (gameboard.getTiles().get(getIndexFromCoord(bottomMost.x, bottomMost.y + 1)).scrapAmount > 0) {
+                    actions.add(String.format("MOVE %d %d %d %d %d", bottomMost.units, bottomMost.x, bottomMost.y, bottomMost.x, bottomMost.y + 1));
+                } else if (gameboard.getTiles().get(getIndexFromCoord(bottomMost.x + direction, bottomMost.y)).scrapAmount > 0) {
+                    actions.add(String.format("MOVE %d %d %d %d %d", bottomMost.units, bottomMost.x, bottomMost.y, bottomMost.x + direction, bottomMost.y));
+                } else {
+                    actions.add(String.format("MOVE %d %d %d %d %d", 1, bottomMost.x, bottomMost.y, bottomMost.x, height-1));
+                }
                 bottomMost.units -= 1;
             }
 
