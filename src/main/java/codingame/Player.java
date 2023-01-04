@@ -45,7 +45,7 @@ class Player {
         List<String> actions = new ArrayList<>();
         if (turn == 1) {
             ecoRecycl = (gameboard.getRoundScrapTiles() / 40);
-            ecoTurn = width;
+            ecoTurn = width / 2;
             err.println("ecoRecycl = " + ecoRecycl);
             err.println("ecoTurn = " + ecoTurn);
             Tile topMost = gameboard.getMyTiles().stream().min(Comparator.comparingInt(t -> t.y)).get();
@@ -94,7 +94,8 @@ class Player {
                     ecoRecyclSize++;
                 } else {
                     if (ecoRecyclSize < ecoRecycl && turn < ecoTurn) {
-                        List<Tile> recycleTiles = gameboard.getMyTiles().stream().filter(t -> t.canBuild && destroysOnlyHisTile(t.x, t.y)).collect(Collectors.toList());
+                        List<Tile> recycleTiles = gameboard.getMyTiles().stream().filter(t -> t.canBuild && destroysOnlyHisTile(t.x, t.y) && !strandsUnits(t.x, t.y))
+                                .collect(Collectors.toList());
                         recycleTiles.sort(Comparator.comparingInt((Tile t) -> t.scrapAmount).reversed());
                         if (!recycleTiles.isEmpty() && recyclingPotential(recycleTiles.get(0).x, recycleTiles.get(0).y) > 15) {
                             Tile recycle = recycleTiles.get(0);
@@ -133,16 +134,16 @@ class Player {
                                 break;
                             }
                         }
-                        if (spawnTile == null) {
-                            for (Tile myTile : gameboard.getMyTiles()) {
-                                if (myTile.canSpawn
-                                        && ((myTile.scrapAmount == 1 && !myTile.inRangeOfRecycler) || myTile.scrapAmount > 1)
-                                        && neighbours(myTile.x, myTile.y).stream()
-                                        .anyMatch(t2 -> (t2.owner == NOONE && t2.scrapAmount > 0))) {
-                                    spawnTile = myTile;
-                                    myTile.canSpawn = false;
-                                    break;
-                                }
+                    }
+                    if (spawnTile == null) {
+                        for (Tile myTile : gameboard.getMyTiles()) {
+                            if (myTile.canSpawn
+                                    && ((myTile.scrapAmount == 1 && !myTile.inRangeOfRecycler) || myTile.scrapAmount > 1)
+                                    && neighbours(myTile.x, myTile.y).stream()
+                                    .anyMatch(t2 -> (t2.owner == NOONE && t2.scrapAmount > 0))) {
+                                spawnTile = myTile;
+                                myTile.canSpawn = false;
+                                break;
                             }
                         }
                     }
@@ -161,6 +162,38 @@ class Player {
             boolean hasReachTop = false;
             boolean hasReachBottom = false;
             for (int i = 0; i < width; ++i) {
+                for (int j = 0; j < height; ++j) {
+                    Tile tile = gameboard.getTiles().get(getIndexFromCoord(i, j));
+                    if (tile.owner == ME) {
+                        hasReachTop = true;
+                        break;
+                    }
+                    if ((tile.owner == NOONE && tile.scrapAmount > 0) || tile.owner == OPP) {
+                        break;
+                    }
+                }
+                if (hasReachTop) {
+                    break;
+                }
+            }
+
+            for (int i = 0; i < width; ++i) {
+                for (int j = height - 1; j >= 0; --j) {
+                    Tile tile = gameboard.getTiles().get(getIndexFromCoord(i, j));
+                    if (tile.owner == ME) {
+                        hasReachBottom = true;
+                        break;
+                    }
+                    if ((tile.owner == NOONE && tile.scrapAmount > 0) || tile.owner == OPP) {
+                        break;
+                    }
+                }
+                if (hasReachBottom) {
+                    break;
+                }
+            }
+
+            for (int i = 0; i < width; ++i) {
                 if (gameboard.getTiles().get(getIndexFromCoord(i, 0)).owner == ME) {
                     hasReachTop = true;
                     break;
@@ -177,25 +210,13 @@ class Player {
             if (!hasReachTop) {
                 Tile topMost = gameboard.getMyUnits().stream().min(Comparator.comparingInt(t -> t.y)).get();
                 int direction = topMost.x < width / 2 ? 1 : -1;
-                if (gameboard.getTiles().get(getIndexFromCoord(topMost.x, topMost.y - 1)).scrapAmount > 0) {
-                    actions.add(String.format("MOVE %d %d %d %d %d", topMost.units, topMost.x, topMost.y, topMost.x, topMost.y - 1));
-                } else if (gameboard.getTiles().get(getIndexFromCoord(topMost.x + direction, topMost.y)).scrapAmount > 0) {
-                    actions.add(String.format("MOVE %d %d %d %d %d", topMost.units, topMost.x, topMost.y, topMost.x + direction, topMost.y));
-                } else {
-                    actions.add(String.format("MOVE %d %d %d %d %d", 1, topMost.x, topMost.y, topMost.x, 0));
-                }
+                actions.add(String.format("MOVE %d %d %d %d %d", 1, topMost.x, topMost.y, width/2 - direction, 0));
                 topMost.units -= 1;
             }
             if (!hasReachBottom) {
                 Tile bottomMost = gameboard.getMyUnits().stream().max(Comparator.comparingInt(t -> t.y)).get();
                 int direction = bottomMost.x < width / 2 ? 1 : -1;
-                if (gameboard.getTiles().get(getIndexFromCoord(bottomMost.x, bottomMost.y + 1)).scrapAmount > 0) {
-                    actions.add(String.format("MOVE %d %d %d %d %d", bottomMost.units, bottomMost.x, bottomMost.y, bottomMost.x, bottomMost.y + 1));
-                } else if (gameboard.getTiles().get(getIndexFromCoord(bottomMost.x + direction, bottomMost.y)).scrapAmount > 0) {
-                    actions.add(String.format("MOVE %d %d %d %d %d", bottomMost.units, bottomMost.x, bottomMost.y, bottomMost.x + direction, bottomMost.y));
-                } else {
-                    actions.add(String.format("MOVE %d %d %d %d %d", 1, bottomMost.x, bottomMost.y, bottomMost.x, height-1));
-                }
+                actions.add(String.format("MOVE %d %d %d %d %d", 1, bottomMost.x, bottomMost.y, width/2 - direction, height-1));
                 bottomMost.units -= 1;
             }
 
@@ -268,6 +289,15 @@ class Player {
         } else {
             out.println(String.join(";", actions));
         }
+    }
+
+    private static boolean strandsUnits(int x, int y) {
+        for (Tile neighbour : neighbours(x, y)) {
+            if (neighbour.units >= 1 && liberty(neighbour.x, neighbour.y) == 1) {
+                return true;
+            }
+        }
+        return false;
     }
 
     static void readGameInput(Scanner input){
@@ -371,8 +401,7 @@ class Player {
         stream = getReversedMyTilesStreamOnOddTurnsAndNormalStreamOnEvenTurns();
         tilesToBuild.addAll(stream.filter(t -> t.canBuild &&
                 (t.scrapAmount > 1 ||(t.scrapAmount == 1 && !t.inRangeOfRecycler)) &&
-                neighbours(t.x, t.y).stream().anyMatch(t2 -> t2.owner == OPP && !t2.recycler) &&
-                neighbours(t.x, t.y).stream().anyMatch(t2 -> t2.owner == OPP && t2.units > 0))
+                neighbours(t.x, t.y).stream().anyMatch(t2 -> t2.owner == OPP && t2.units > 1))
                 .collect(Collectors.toList()));
         tilesToBuild.sort(Comparator.comparingInt((Tile t) -> recyclingPotential(t.x, t.y)).reversed());
         if (!tilesToBuild.isEmpty()) {
@@ -403,6 +432,10 @@ class Player {
             neighbours.add(gameboard.getTiles().get(i));
         }
         return neighbours;
+    }
+
+    public static long liberty(int x, int y) {
+        return neighbours(x, y).stream().filter(t -> !(t.scrapAmount == 0 || t.recycler || (t.scrapAmount == 1 && t.inRangeOfRecycler))).count();
     }
 
     private static boolean destroysOnlyHisTile(int x, int y) {
